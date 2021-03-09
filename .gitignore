@@ -1,0 +1,15 @@
+*.pyc
+.cache
+__pycache__/
+.idea
+*env
+*bak
+*~
+*.o
+*.a
+*.dll
+*.so
+public/*
+*.exe
+
+!mcp2221/libs/**/*

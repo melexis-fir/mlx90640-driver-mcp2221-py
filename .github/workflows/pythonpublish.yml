@@ -1,0 +1,250 @@
+name: build-test-publish
+
+on:
+  push:
+    branches:
+      - master
+  release:
+    types: 
+      - created
+
+jobs:
+  build-rpi4:
+    runs-on: ubuntu-latest
+    container:
+      image: mitchallen/pi-cross-compile
+    env:
+      AR: /pitools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/arm-linux-gnueabihf-ar
+      CC: /pitools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/arm-linux-gnueabihf-gcc
+      CFLAGS_EXTRA: '-D_BSD_SOURCE'
+    steps:
+    - uses: actions/checkout@v2
+    - run: |
+        apt update 
+        apt-get install --yes libudev-dev libusb-1.0-0-dev libhidapi-dev
+    - run: make -C mcp2221/c-code clean all -e MACHINE=armv7l -e LIB_RESULT_DIR=builded
+    - uses: actions/upload-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/c-code/builded
+  build-jetson-nano:
+    runs-on: ubuntu-latest
+    container:
+      image: kv76/cross_compile_jetson_nano:latest
+    env:
+      CC: /install/bin/aarch64-unknown-linux-gnu-gcc
+      AR: /install/bin/aarch64-unknown-linux-gnu-ar
+      CFLAGS_EXTRA: '-D_BSD_SOURCE'
+    steps:
+    - uses: actions/checkout@v2
+    - run: |
+        apt update 
+        apt-get install --yes libudev-dev libusb-1.0-0-dev libhidapi-dev
+    - run: make -C mcp2221/c-code clean all -e MACHINE=aarch64 -e LIB_RESULT_DIR=builded
+    - uses: actions/upload-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/c-code/builded
+  build-linux-pc:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: |
+        sudo apt update
+        sudo apt-get install --yes libudev-dev libusb-1.0-0-dev libhidapi-dev
+    - run: make -C mcp2221/c-code clean all -e LIB_RESULT_DIR=builded
+    - uses: actions/upload-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/c-code/builded
+  build-win10-pc:
+    runs-on: ubuntu-latest
+    env:
+      CC: /usr/local/bin/x86_64-w64-mingw32-gcc
+      AR: /usr/local/bin/x86_64-w64-mingw32-ar
+    container:
+      image: mmozeiko/mingw-w64:latest
+    steps:
+    - uses: actions/checkout@v2
+    - run: find -type f
+    - run: make -C mcp2221/c-code clean all -e LIB_RESULT_DIR=builded detected_OS=Windows
+    - uses: actions/upload-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/c-code/builded
+
+  test-unittesting:
+    runs-on: ubuntu-latest
+    needs:
+      - build-rpi4
+      - build-jetson-nano
+      - build-linux-pc
+      - build-win10-pc
+    steps:
+    - uses: actions/checkout@v2
+
+  test-on-hardware-raspberry-pi-4:
+    environment:
+      name: raspberry-pi-4|mcp2221|hw90640
+    needs:
+      - test-unittesting
+    runs-on: 
+      - self-hosted
+      - linux
+      - rpi4
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/download-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/libs
+    - name: Create virtual env and install requirements
+      run: |
+         virtualenv venv
+         source venv/bin/activate
+         pip install --no-input .
+         pip install --no-input pytest pytest-ordering pytest-html pytest-metadata
+    - name: run tests
+      run: |
+         source venv/bin/activate
+         python -m pytest -v tests/app_testing -p no:cacheprovider --html=public/app-tests-rpi4-report.html --self-contained-html --metadata homepage https://github.com/melexis-fir/mlx90640-driver-mcp2221-py --metadata i2c_port mcp://mcp:2221/0 --metadata host_hardware 'Raspberry Pi 4'
+    - uses: actions/upload-artifact@master
+      with:
+        name: test_report
+        path: public
+  test-on-hardware-jetson-nano:
+    environment:
+      name: jetson-nano|mcp2221|hw90640
+    needs:
+      - test-unittesting
+    runs-on: 
+      - self-hosted
+      - linux
+      - jetson-nano
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/download-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/libs
+    - name: Create virtual env and install requirements
+      run: |
+         virtualenv venv
+         source venv/bin/activate
+         pip install --no-input .
+         pip install --no-input pytest pytest-ordering pytest-html pytest-metadata
+    - name: run tests
+      run: |
+         source venv/bin/activate
+         python -m pytest -v tests/app_testing -p no:cacheprovider --html=public/app-tests-jetson-nano-report.html --self-contained-html --metadata homepage https://github.com/melexis-fir/mlx90640-driver-mcp2221-py --metadata i2c_port mcp://mcp:2221/0 --metadata host_hardware 'Jetson Nano'
+    - uses: actions/upload-artifact@master
+      with:
+        name: test_report
+        path: public
+  test-on-hardware-ubuntu:
+    environment:
+      name: ubuntu|mcp2221|hw90640
+    needs:
+      - test-unittesting
+    runs-on: 
+      - self-hosted
+      - linux
+      - ubuntu
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/download-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/libs
+    - name: Create virtual env and install requirements
+      run: |
+         virtualenv venv
+         source venv/bin/activate
+         pip install --no-input .
+         pip install --no-input pytest pytest-ordering pytest-html pytest-metadata
+    - name: run tests
+      run: |
+         source venv/bin/activate
+         python -m pytest -v tests/app_testing -p no:cacheprovider --html=public/app-tests-ubuntu-pc-report.html --self-contained-html --metadata homepage https://github.com/melexis-fir/mlx90640-driver-mcp2221-py --metadata i2c_port mcp://mcp:2221/0 --metadata host_hardware 'ubuntu pc'
+    - uses: actions/upload-artifact@master
+      with:
+        name: test_report
+        path: public
+  test-on-hardware-win10:
+    environment:
+      name: windows|mcp2221|hw90640
+    needs:
+      - test-unittesting
+    runs-on: 
+      - self-hosted
+      - windows
+      - win10
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/download-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/libs
+    - name: Create virtual env and install requirements
+      shell: cmd
+      run: |
+         virtualenv venv
+         call venv\Scripts\activate.bat
+         pip install --no-input .
+         pip install --no-input pytest pytest-ordering pytest-html pytest-metadata
+    - name: run tests
+      shell: cmd
+      run: |
+         call venv\Scripts\activate.bat
+         python -m pytest -v tests\app_testing -p no:cacheprovider --html=public\app-tests-win10-pc-report.html --self-contained-html --metadata homepage https://github.com/melexis-fir/mlx90640-driver-mcp2221-py --metadata i2c_port mcp://mcp:2221/0 --metadata host_hardware "win10 pc"
+    - uses: actions/upload-artifact@master
+      with:
+        name: test_report
+        path: public
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    if:   github.event_name == 'release' && github.event.action == 'created'
+    needs:
+      - test-on-hardware-raspberry-pi-4
+      - test-on-hardware-jetson-nano
+      - test-on-hardware-ubuntu
+      - test-on-hardware-win10
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/download-artifact@master
+      with:
+        name: libraries
+        path: mcp2221/libs
+    - name: Set up Python
+      uses: actions/setup-python@v1
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install setuptools wheel twine
+    - name: Build and publish
+      env:
+        TWINE_USERNAME: '${{ secrets.PYPI_USERNAME }}'
+        TWINE_PASSWORD: '${{ secrets.PYPI_PASSWORD }}'
+      run: |
+        python setup.py sdist bdist_wheel
+        twine upload dist/*
+
+  gh-pages:
+    runs-on: ubuntu-latest
+    needs:
+      - publish-pypi
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/download-artifact@master
+        with:
+          name: test_report
+          path: public
+      - run: find public
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
