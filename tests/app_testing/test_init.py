@@ -52,7 +52,7 @@ def test_dump_frame():
     dev.dump_eeprom()
     dev.extract_parameters()
 
-    for i in range(0, 5):
+    for i in range(0, 7):
         dev.get_frame_data()
         ta = dev.get_ta() - 8.0
         emissivity = 1
