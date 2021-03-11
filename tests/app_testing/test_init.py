@@ -38,11 +38,11 @@ def test_i2c_init(metadata):
 def test_refresh_rate_setting():
     global dev
 
-    assert dev.set_refresh_rate(1) == 0
-    assert dev.get_refresh_rate() == 1
-
     assert dev.set_refresh_rate(4) == 0
     assert dev.get_refresh_rate() == 4
+
+    assert dev.set_refresh_rate(1) == 0
+    assert dev.get_refresh_rate() == 1
 
 
 @pytest.mark.run(order=order+4)
@@ -52,7 +52,7 @@ def test_dump_frame():
     dev.dump_eeprom()
     dev.extract_parameters()
 
-    for i in range(0, 7):
+    for i in range(0, 5):
         dev.get_frame_data()
         ta = dev.get_ta() - 8.0
         emissivity = 1
